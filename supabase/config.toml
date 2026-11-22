@@ -1,0 +1,2 @@
+[functions.course-shop]
+verify_jwt = false
