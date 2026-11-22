@@ -99,12 +99,9 @@
  function render() {
   const box = element('packages');
   box.replaceChildren();
-  packages.forEach((item,index) => {
+  packages.forEach(item => {
    const card = document.createElement('article');
    card.className = 'package';
-   const label = document.createElement('div');
-   label.className = 'package-label';
-   label.textContent = ['Первый шаг','Собственный проект','Практический пакет'][index] || 'Пакет';
    const heading = document.createElement('h3');
    heading.textContent = item.title;
    const description = document.createElement('p');
@@ -113,14 +110,12 @@
    const price = document.createElement('p');
    price.className = 'price';
    price.textContent = money(item.price);
-   const hint = document.createElement('div');
-   hint.className = 'price-note';
-   hint.textContent = 'тестовая стоимость · без списания';
    const button = document.createElement('button');
    button.type = 'button';
    button.textContent = 'Выбрать пакет';
+   button.setAttribute('aria-label','Выбрать пакет «'+item.title+'»');
    button.addEventListener('click',() => open(item,button));
-   card.append(label,heading,description,price,hint,button);
+   card.append(heading,description,price,button);
    box.append(card);
   });
  }
@@ -130,7 +125,7 @@
   order = null;
   element('dialog-title').textContent = item.title;
   element('summary').textContent = money(item.price)+' · доступ в учебный канал и два файла';
-  element('progress').textContent = 'Учебная покупка для демонстрации.';
+  element('progress').textContent = '';
   element('pay').textContent = payLabel();
   element('pay').disabled = !ready;
   actions('pay');
@@ -236,6 +231,7 @@
  }
  element('restore').addEventListener('click',resume);
  async function init() {
+  const banner = element('connection');
   render();
   try {
    const catalog = await api('catalog');
@@ -243,17 +239,17 @@
    ready = catalog.paymentConfigured;
    paymentMode = catalog.paymentMode;
    render();
-   const banner = element('connection');
-   banner.textContent = !ready ? 'Доступен просмотр пакетов. Оплата пока подключается.'
-    : paymentMode === 'demo' ? 'Учебная оплата доступна. Заказы сохраняются, деньги не списываются.'
-    : 'Тестовый магазин подключён. Оплата проверяется сервером.';
-   banner.classList.toggle('ready',ready);
-   if (!catalog.telegramConfigured && ready) banner.textContent += ' Подключение Telegram ещё завершается.';
-  } catch { element('connection').textContent = 'Сервер пока не подключён. Доступен просмотр пакетов.'; }
+   banner.hidden = ready && catalog.telegramConfigured;
+   banner.textContent = !ready ? 'Оплата временно недоступна.'
+    : !catalog.telegramConfigured ? 'Подключение Telegram ещё завершается.' : '';
+  } catch { banner.textContent = 'Оплата временно недоступна. Попробуйте обновить страницу.'; }
   if (new URLSearchParams(location.search).has('order')) {
    history.replaceState({},'',location.pathname);
    if (restore()) resume();
-   else element('connection').textContent = 'Откройте покупку в том же браузере, в котором начали оплату.';
+   else {
+    banner.textContent = 'Откройте покупку в том же браузере, в котором начали оплату.';
+    banner.hidden = false;
+   }
   }
  }
  init();
