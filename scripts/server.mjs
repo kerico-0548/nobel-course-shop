@@ -7,8 +7,16 @@ import {makeShop,telegram,diskLoader,yookassa} from '../supabase/functions/_shar
 await mkdir('.local/db',{recursive:true});const pg=new PGlite('.local/db');
 await pg.exec("DO $$ BEGIN IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF; IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated; END IF; IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role; END IF; END $$;");
 if(!(await pg.query("select to_regnamespace('course_shop') ns")).rows[0].ns)await pg.exec(await readFile('supabase/migrations/202611220001_course_shop.sql','utf8'));
+if(!(await pg.query("select to_regprocedure('public.cs_demo_decide(uuid,text,text)') as handler")).rows[0].handler){
+ await pg.exec(await readFile('supabase/migrations/20261122172614_demo_checkout.sql','utf8'));
+}
 const settings=await readEnv(),env=k=>k==='SITE_URL'?'http://localhost:4174/':settings[k]||'';
-const db=async(op,p={})=>(await pg.query('select public.cs_rpc($1,$2::jsonb,$3::bigint,$4::bigint) result',[op,JSON.stringify(p),env('ADMIN_CHAT_ID')||0,env('COURSE_CHANNEL_ID')||0])).rows[0].result;
+const db=async(op,p={})=>{
+ const {rows}=op==='demo_decide'
+  ?await pg.query('select public.cs_demo_decide($1::uuid,$2,$3) result',[p.id,p.accessHash,p.outcome])
+  :await pg.query('select public.cs_rpc($1,$2::jsonb,$3::bigint,$4::bigint) result',[op,JSON.stringify(p),env('ADMIN_CHAT_ID')||0,env('COURSE_CHANNEL_ID')||0]);
+ return rows[0].result;
+};
 const shop=makeShop({env,db,bot:telegram(env),loadMaterial:diskLoader(env),payments:yookassa(env)});
 const pub=resolve('public');const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'};
 let busy=false;const tick=setInterval(async()=>{if(busy)return;busy=true;try{await shop.drain();}catch{}finally{busy=false;}},15000);tick.unref();

@@ -9,7 +9,12 @@ export function makeRpc(env,fetcher=fetch){
  let key=env('SERVER_DB_KEY')||env('SUPABASE_SERVICE_ROLE_KEY');
  if(!key&&env('SUPABASE_SECRET_KEYS')){const x=JSON.parse(env('SUPABASE_SECRET_KEYS'));key=x.default||Object.values(x).find(v=>typeof v==='string');}
  return async(op,data={})=>{
-  const r=await fetcher(env('SUPABASE_URL')+'/rest/v1/rpc/cs_rpc',{method:'POST',headers:{apikey:key,...(key?.startsWith('eyJ')?{Authorization:'Bearer '+key}:{}),'Content-Type':'application/json'},body:JSON.stringify({p_op:op,p:data,p_admin:Number(env('ADMIN_CHAT_ID')||0),p_channel:Number(env('COURSE_CHANNEL_ID')||0)}),signal:AbortSignal.timeout(12000)});
+  const isDemoDecision=op==='demo_decide';
+  const rpc=isDemoDecision?'cs_demo_decide':'cs_rpc';
+  const args=isDemoDecision
+   ?{p_order:data.id,p_access_hash:data.accessHash,p_outcome:data.outcome}
+   :{p_op:op,p:data,p_admin:Number(env('ADMIN_CHAT_ID')||0),p_channel:Number(env('COURSE_CHANNEL_ID')||0)};
+  const r=await fetcher(env('SUPABASE_URL')+'/rest/v1/rpc/'+rpc,{method:'POST',headers:{apikey:key,...(key?.startsWith('eyJ')?{Authorization:'Bearer '+key}:{}),'Content-Type':'application/json'},body:JSON.stringify(args),signal:AbortSignal.timeout(12000)});
   if(!r.ok)throw new Error('database_'+r.status);return r.json();
  };
 }
@@ -36,6 +41,7 @@ export function yookassa(env,fetcher=fetch){
 }
 
 const ROBO_MODE='robokassa_test';
+const DEMO_MODE='demo';
 const ROBO_CHECKOUT='https://auth.robokassa.ru/Merchant/Index.aspx';
 
 function robokassa(env){
@@ -120,12 +126,17 @@ export function makeShop({env,db,bot,loadMaterial,payments,clock=()=>Date.now()}
  const origin=()=>{try{return new URL(env('SITE_URL')).origin;}catch{return '';}};
  const configured=()=>Boolean(env('BOT_TOKEN')&&env('BOT_USERNAME')&&channel&&admin);
  const yooReady=()=>/^test_/.test(env('YOOKASSA_SECRET_KEY'))&&Boolean(env('YOOKASSA_SHOP_ID'));
- const paymentConfigured=()=>Boolean(origin()&&(paymentMode===ROBO_MODE?robo.ready:paymentMode==='yookassa_test'&&yooReady()));
+ const paymentConfigured=()=>Boolean(origin()&&(paymentMode===DEMO_MODE||(paymentMode===ROBO_MODE?robo.ready:paymentMode==='yookassa_test'&&yooReady())));
  const ownOrder=async(data,auth)=>{
   if(!UUID.test(data.id||'')||!auth?.startsWith('Bearer '))return null;
   const x=await db('get',{id:data.id,accessHash:await hash(auth.slice(7))});return x?.error?null:x;
  };
  const internal=async id=>db('order_internal',{id});
+ const orderStatus=async(order,confirmationUrl=null)=>{
+  const telegramReady=order.paymentState==='paid'&&configured();
+  const claim=telegramReady?await token(env('SHOP_ADMIN_SECRET'),'claim:'+order.id):null;
+  return {order,confirmationUrl,telegramUrl:claim?'https://t.me/'+env('BOT_USERNAME')+'?start='+claim:null,telegramConfigured:configured()};
+ };
  async function verifiedPayment(o,data){
   const amount=String(data.amount?.value||'').match(/^(\d+)\.(\d{2})$/);
   const price=amount?Number(amount[1])*100+Number(amount[2]):-1;
@@ -176,7 +187,7 @@ export function makeShop({env,db,bot,loadMaterial,payments,clock=()=>Date.now()}
  async function body(req){try{return JSON.parse(new TextDecoder().decode(await limitedBytes(req,8192)));}catch(e){if(e.message==='file_too_large')throw new Error('body_size');throw e;}}
  return {drain,async handle(req){
   const path=new URL(req.url).pathname.split('/').filter(Boolean).at(-1),requestOrigin=req.headers.get('origin');
-  const isPublic=['catalog','create','status'].includes(path);
+  const isPublic=['catalog','create','status','demo-payment'].includes(path);
   const cors={'Access-Control-Allow-Origin':origin(),'Vary':'Origin','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
   if(isPublic&&requestOrigin&&requestOrigin!==origin())return json({error:'Этот сайт не подключён.'},403);
   if(req.method==='OPTIONS'&&isPublic)return new Response(null,{status:204,headers:cors});
@@ -191,6 +202,8 @@ export function makeShop({env,db,bot,loadMaterial,payments,clock=()=>Date.now()}
     const ip=req.headers.get('cf-connecting-ip')||req.headers.get('x-forwarded-for')?.split(',')[0]||'unknown';
     const o=await db('create',{id:x.requestId,package:x.packageId,accessHash:await hash(accessToken),claimHash:await hash(claim),ipHash:await hash(ip+env('SHOP_ADMIN_SECRET')),mode:paymentMode});
     if(o.error)return out({error:o.error==='rate'?'Слишком много покупок. Попробуйте позже.':'Не удалось создать покупку.'},o.error==='rate'?429:409);
+    if(o.mode!==paymentMode)return out({error:'Эта покупка открыта в другом режиме. Выберите пакет заново.'},409);
+    if(o.mode===DEMO_MODE)return out({...await orderStatus(o),accessToken});
     let stored=await internal(o.id);
     if(!stored.provider_payment_id){
      let paymentId,confirmationUrl;
@@ -215,8 +228,17 @@ export function makeShop({env,db,bot,loadMaterial,payments,clock=()=>Date.now()}
     const stored=await internal(o.id);
     const actual=stored.mode==='yookassa_test'&&stored.provider_payment_id
      ?await verifiedPayment(stored,await payments.get(stored.provider_payment_id)):o;
-    const claim=await token(env('SHOP_ADMIN_SECRET'),'claim:'+x.id);
-    return out({order:actual,confirmationUrl:stored.confirmation_url,telegramUrl:actual.paymentState==='paid'&&configured()?'https://t.me/'+env('BOT_USERNAME')+'?start='+claim:null,telegramConfigured:configured()});
+    return out(await orderStatus(actual,stored.confirmation_url));
+   }
+   if(path==='demo-payment'){
+    if(paymentMode!==DEMO_MODE)return out({error:'Учебная оплата отключена.'},404);
+    const x=await body(req),auth=req.headers.get('authorization')||'';
+    if(!UUID.test(x.id||'')||!/^Bearer [A-Za-z0-9_-]{43}$/.test(auth))return out({error:'Покупка не найдена.'},404);
+    if(!['paid','canceled'].includes(x.outcome))return out({error:'Выберите результат учебной оплаты.'},400);
+    const order=await db('demo_decide',{id:x.id,accessHash:await hash(auth.slice(7)),outcome:x.outcome});
+    if(!order||order.error==='not_found')return out({error:'Покупка не найдена.'},404);
+    if(order.error==='settled')return out({error:'У этой покупки уже есть результат. Обновите статус.'},409);
+    return out(await orderStatus(order));
    }
    if(path==='payment'){
     const x=await body(req),id=x.object?.id;

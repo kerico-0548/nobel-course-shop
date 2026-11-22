@@ -14,8 +14,22 @@
    <aside class="materials-card" aria-label="Материалы курса"><div class="stack-art" aria-hidden="true"><div class="paper paper-back"><span>практика</span><i></i><i></i><i></i></div><div class="paper paper-front"><span class="file-badge">XLSX</span><div class="grid-art"></div><strong>Ваш первый результат</strong></div></div><div class="materials-caption"><strong>Два файла для начала</strong><p>Короткий урок в TXT и таблица практики в Excel — из Яндекс Диска прямо в Telegram.</p></div></aside>
   </section>
   <section id="courses" class="courses"><div class="section-head"><div><p class="eyebrow">Начните с малого</p><h2>Три повода попробовать</h2></div><p>В тесте все пакеты открывают один учебный канал и одинаковые два файла.</p></div><p id="connection" class="connection" role="status">Проверяем подключение магазина…</p><div id="packages" class="packages" aria-label="Пакеты курсов"></div></section>
-  <section id="how" class="how"><div class="section-head"><div><p class="eyebrow">От покупки до практики</p><h2>Доступ с проверкой модератора</h2></div></div><ol><li><span>1</span><strong>Тестовая оплата</strong><p>Вы переходите на страницу платёжного сервиса и используете тестовые данные.</p></li><li><span>2</span><strong>Запуск бота</strong><p>Ссылка связывает покупку именно с вашим Telegram-аккаунтом.</p></li><li><span>3</span><strong>Заявка в канал</strong><p>Бот выдаёт приглашение. Модератор проверяет и одобряет вступление.</p></li><li><span>4</span><strong>Файлы в чате</strong><p>После одобрения бот скачивает урок и таблицу с Яндекс Диска и отправляет вам.</p></li></ol></section>
+  <section id="how" class="how"><div class="section-head"><div><p class="eyebrow">От покупки до практики</p><h2>Доступ с проверкой модератора</h2></div></div><ol><li><span>1</span><strong>Тестовая оплата</strong><p>Выберите пакет и проверьте, как меняется статус заказа после подтверждения или отмены.</p></li><li><span>2</span><strong>Запуск бота</strong><p>Ссылка связывает покупку именно с вашим Telegram-аккаунтом.</p></li><li><span>3</span><strong>Заявка в канал</strong><p>Бот выдаёт приглашение. Модератор проверяет и одобряет вступление.</p></li><li><span>4</span><strong>Файлы в чате</strong><p>После одобрения бот скачивает урок и таблицу с Яндекс Диска и отправляет вам.</p></li></ol></section>
  </main>
  <footer><a class="brand small" href="./">практика</a><p>Учебный проект · Telegram + Яндекс Диск</p><button id="restore" class="text-button" type="button">Моя последняя покупка</button></footer>
- <dialog id="purchase" aria-labelledby="dialog-title"><div class="dialog-top"><span class="pill">Тестовая покупка</span><button id="close" type="button" class="close" aria-label="Закрыть">×</button></div><h2 id="dialog-title">Ваш пакет</h2><div id="summary"></div><div id="progress" class="progress"></div><p id="notice" class="notice" role="status" aria-live="polite"></p><div class="dialog-actions"><button id="pay" class="primary" type="button">Перейти к тестовой оплате</button><button id="refresh" class="secondary" type="button" hidden>Проверить оплату</button><a id="telegram" class="primary" hidden>Продолжить в Telegram</a><a id="resume" class="secondary" hidden>Вернуться к оплате</a></div><p class="fine">Не вводите настоящие реквизиты карты. Номер покупки и ссылка относятся к вашему доступу — не передавайте их другим.</p></dialog>
+ <dialog id="purchase" aria-labelledby="dialog-title">
+  <div class="dialog-top"><span class="pill">Тестовая покупка</span><button id="close" type="button" class="close" aria-label="Закрыть">×</button></div>
+  <h2 id="dialog-title">Ваш пакет</h2>
+  <div id="summary"></div>
+  <div id="progress" class="progress"></div>
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+  <div class="dialog-actions">
+   <button id="pay" class="primary" type="button">Перейти к тестовой оплате</button>
+   <button id="demo-confirm" class="primary" type="button" hidden>Подтвердить учебную оплату</button>
+   <button id="demo-cancel" class="secondary" type="button" hidden>Отменить учебную оплату</button>
+   <button id="refresh" class="secondary" type="button" hidden>Проверить статус</button>
+   <a id="telegram" class="primary" hidden>Продолжить в Telegram</a>
+   <a id="resume" class="secondary" hidden>Вернуться к оплате</a>
+  </div>
+ </dialog>
 </body></html>

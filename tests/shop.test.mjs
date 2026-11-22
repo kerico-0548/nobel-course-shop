@@ -4,13 +4,19 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {makeShop,hash,token,normalize,yookassa,diskLoader} from '../supabase/functions/_shared/core.js';
 const schema=await readFile(new URL('../supabase/migrations/202611220001_course_shop.sql',import.meta.url),'utf8');
+const demoSchema=await readFile(new URL('../supabase/migrations/20261122172614_demo_checkout.sql',import.meta.url),'utf8');
 const A=900001,U=900002,V=900003,C=-100900000001;
 async function fixture(t,overrides={}){
- const pg=new PGlite();t.after(()=>pg.close());await pg.exec('create role anon;create role authenticated;create role service_role;');await pg.exec(schema);
+ const pg=new PGlite();t.after(()=>pg.close());await pg.exec('create role anon;create role authenticated;create role service_role;');await pg.exec(schema);await pg.exec(demoSchema);
  const settings={SITE_URL:'https://example.github.io/course/',SHOP_ADMIN_SECRET:'s'.repeat(43),TG_WEBHOOK_SECRET:'w'.repeat(43),ADMIN_CHAT_ID:String(A),COURSE_CHANNEL_ID:String(C),BOT_TOKEN:'test-only',BOT_USERNAME:'example_course_bot',YOOKASSA_SECRET_KEY:'test_unit_only',YOOKASSA_SHOP_ID:'100500',YANDEX_DISK_TOKEN:'unit-test'};
  Object.assign(settings,overrides);
  const env=k=>settings[k]||'';
- const db=async(op,p={})=>(await pg.query('select public.cs_rpc($1,$2::jsonb,$3::bigint,$4::bigint) result',[op,JSON.stringify(p),A,C])).rows[0].result;
+ const db=async(op,p={})=>{
+  const {rows}=op==='demo_decide'
+   ?await pg.query('select public.cs_demo_decide($1::uuid,$2,$3) result',[p.id,p.accessHash,p.outcome])
+   :await pg.query('select public.cs_rpc($1,$2::jsonb,$3::bigint,$4::bigint) result',[op,JSON.stringify(p),A,C]);
+  return rows[0].result;
+ };
  const calls=[],members=new Set(),pay=new Map();let counter=0,update=0,failMaterial=null;
  const bot=async(method,data)=>{
   if(method==='getChatMember')return {status:members.has(Number(data.user_id))?'member':'left'};
@@ -37,6 +43,37 @@ async function fixture(t,overrides={}){
  async function join(o,user=U){const row=await db('order_internal',{id:o.order.id});return event({actor:user,action:'join',channel:C,invite:row.invite_link});}
  return {pg,db,settings,env,calls,members,pay,shop,http,order,paid,event,start,join,failNext(name){failMaterial=name;}};
 }
+test('Демо: подтверждение и отмена сохраняются, внешние платежи не затрагиваются',async t=>{
+ const f=await fixture(t,{PAYMENT_MODE:'demo'});
+ const draft=await f.order();
+ assert.equal(draft.order.mode,'demo');
+ assert.equal(draft.order.paymentState,'pending');
+ assert.equal(draft.confirmationUrl,null);
+ const decide=(purchase,outcome,access=purchase.accessToken)=>f.http('demo-payment',{id:purchase.order.id,outcome},access);
+ assert.equal((await decide(draft,'paid','q'.repeat(43))).status,404);
+ assert.equal((await decide(draft,'unknown')).status,400);
+ const paid=await decide(draft,'paid');
+ assert.equal(paid.status,200);
+ assert.equal(paid.body.order.paymentState,'paid');
+ assert.match(paid.body.telegramUrl,/^https:\/\/t\.me\//);
+ assert.equal((await decide(draft,'paid')).body.order.paymentState,'paid');
+ assert.equal((await decide(draft,'canceled')).status,409);
+
+ const declined=await f.order();
+ assert.equal((await decide(declined,'canceled')).body.telegramUrl,null);
+ assert.equal((await decide(declined,'paid')).status,409);
+ assert.equal((await f.http('status',{id:declined.order.id},declined.accessToken)).body.order.paymentState,'canceled');
+
+ const externalId=crypto.randomUUID(),externalKey='b'.repeat(43);
+ await f.db('create',{id:externalId,package:'start',accessHash:await hash(externalKey),claimHash:await hash(externalId),ipHash:'external',mode:'robokassa_test'});
+ assert.equal((await f.http('demo-payment',{id:externalId,outcome:'paid'},externalKey)).status,404);
+ assert.equal((await f.http('create',{requestId:externalId,packageId:'start',clientKey:externalKey})).status,409);
+ assert.equal((await f.db('order_internal',{id:externalId})).payment_state,'pending');
+ assert.equal(f.pay.size,0);
+ await f.pg.exec('set role anon');
+ await assert.rejects(()=>f.pg.query("select public.cs_demo_decide($1,'wrong','paid')",[draft.order.id]),/permission denied/i);
+ await f.pg.exec('reset role');
+});
 test('Robokassa: тестовая ссылка и подтверждение только через подписанное уведомление',async t=>{
  const f=await fixture(t,{PAYMENT_MODE:'robokassa_test',ROBOKASSA_MERCHANT_LOGIN:'unit_shop',ROBOKASSA_TEST_PASSWORD_1:'unit-pass-one',ROBOKASSA_TEST_PASSWORD_2:'unit-pass-two'});
  const purchase=await f.order();

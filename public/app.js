@@ -1,28 +1,260 @@
-(()=>{
- const $=id=>document.getElementById(id),endpoint=String(window.SHOP_CONFIG?.endpoint||'').replace(/\/$/,'');
- const fallback=[{id:'start',title:'Старт с Codex',description:'Первый небольшой проект и понятный план практики',price:59000},{id:'site',title:'Сайт своими руками',description:'От идеи до страницы с работающими действиями',price:149000},{id:'practice',title:'Больше практики',description:'Тот же учебный канал и материалы для проверки всей цепочки',price:249000}];
- let packages=fallback,ready=false,provider=null,selection=null,order=null,creating=null,busy=false,lastFocus=null;
- const money=n=>new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0}).format(n/100);
- const storageKey='nobel-course-shop-v1';
- function save(){if(order)try{localStorage.setItem(storageKey,JSON.stringify(order));}catch{}}
- function restore(){try{const x=JSON.parse(localStorage.getItem(storageKey));if(x?.id&&x?.accessToken&&/^[0-9a-f-]{36}$/i.test(x.id))return x;const i=JSON.parse(localStorage.getItem(storageKey+'.intent'));return i?.requestId&&i?.clientKey?{id:i.requestId,accessToken:i.clientKey,packageId:i.packageId}:null;}catch{return null;}}
- function intent(packageId){try{const x=JSON.parse(localStorage.getItem(storageKey+'.intent'));if(x?.packageId===packageId&&x?.requestId&&x?.clientKey)return x;}catch{}const bytes=crypto.getRandomValues(new Uint8Array(32));const x={requestId:crypto.randomUUID(),packageId,clientKey:btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','')};try{localStorage.setItem(storageKey+'.intent',JSON.stringify(x));}catch{}return x;}
- function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
- function external(value,kind){try{const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port)return null;if(kind==='telegram')return u.hostname==='t.me'?u.href:null;if(u.hostname==='auth.robokassa.ru'&&u.pathname==='/Merchant/Index.aspx'&&u.searchParams.get('IsTest')==='1')return u.href;return ['yoomoney.ru','yookassa.ru'].some(h=>u.hostname===h||u.hostname.endsWith('.'+h))?u.href:null;}catch{return null;}}
- async function api(path,data,token){if(!endpoint)throw new Error('Сервер пока не подключён.');const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),25000);try{const r=await fetch(endpoint+'/'+path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(data?{body:JSON.stringify(data)}:{}),signal:ctrl.signal});const x=await r.json();if(!r.ok)throw new Error(x.error||'Не удалось выполнить запрос.');return x;}catch(e){if(e.name==='AbortError')throw new Error('Сервис не ответил вовремя. Данные покупки сохранены. Попробуйте проверить статус.');if(e instanceof TypeError)throw new Error('Нет связи с сервером. Попробуйте ещё раз.');throw e;}finally{clearTimeout(timer);}}
- function render(){const box=$('packages');box.replaceChildren();packages.forEach((p,i)=>{const card=document.createElement('article');card.className='package';const label=document.createElement('div');label.className='package-label';label.textContent=['Первый шаг','Собственный проект','Практический пакет'][i]||'Пакет';const h=document.createElement('h3');h.textContent=p.title;const desc=document.createElement('p');desc.className='description';desc.textContent=p.description;const price=document.createElement('p');price.className='price';price.textContent=money(p.price);const hint=document.createElement('div');hint.className='price-note';hint.textContent='тестовая стоимость · без списания';const button=document.createElement('button');button.type='button';button.textContent='Выбрать пакет';button.addEventListener('click',()=>open(p,button));card.append(label,h,desc,price,hint,button);box.append(card);});}
- function open(p,focus){lastFocus=focus||document.activeElement;selection=p;creating=null;order=null;$('dialog-title').textContent=p.title;$('summary').textContent=money(p.price)+' · доступ в учебный канал + два файла';$('progress').textContent='Тестовая оплата, затем проверка модератора в Telegram.';$('pay').textContent=provider?'Перейти к оплате в '+provider:'Перейти к тестовой оплате';$('pay').hidden=false;$('pay').disabled=!ready;$('refresh').hidden=true;$('telegram').hidden=true;$('resume').hidden=true;notice(ready?'Используйте тестовые платёжные данные на странице оплаты.':'Тестовая оплата пока подключается. Витрину уже можно посмотреть; покупка станет доступна после настройки сервера.');$('purchase').showModal();}
- function update(x){const o=x.order;order={...order,id:o.id,packageId:o.packageId,confirmationUrl:external(x.confirmationUrl,'payment')||order?.confirmationUrl};save();$('dialog-title').textContent='Покупка №'+o.number;$('summary').textContent=(packages.find(p=>p.id===o.packageId)?.title||'Учебный пакет')+' · '+money(o.price);$('pay').hidden=true;$('refresh').hidden=false;$('refresh').disabled=false;$('telegram').hidden=true;$('progress').textContent='Оплата: '+({pending:'ожидается',paid:'подтверждена',canceled:'отменена'})[o.paymentState]+' · Доступ: '+({unlinked:'аккаунт Telegram ещё не связан',linked:'бот запущен',invited:'приглашение выдано',requested:'ждём модератора',approving:'модератор открывает доступ',approved:'канал доступен, файлы отправляются в боте',declining:'заявка отклоняется',declined:'модератор отклонил заявку'})[o.accessState];
-  if(o.paymentState==='paid'){const link=external(x.telegramUrl,'telegram');if(link){$('telegram').href=link;$('telegram').hidden=false;notice(o.accessState==='approved'?'Доступ подтверждён. Откройте бота: там находятся учебные файлы.':'Оплата подтверждена. Откройте бота и нажмите «Запустить», затем подайте заявку в канал. Файлы придут после одобрения.');}else notice('Тестовая оплата подтверждена. Подключение Telegram ещё завершается. Сохранённую покупку можно открыть позже.');$('resume').hidden=true;}
-  else if(o.paymentState==='canceled'){notice('Тестовый платёж отменён. Канал и файлы не открываются. Для новой попытки выберите пакет заново.');$('resume').hidden=true;}
-  else {notice('Платёж ещё не подтверждён. После завершения оплаты нажмите «Проверить оплату».');if(!order.confirmationUrl){$('pay').textContent=provider?'Перейти к оплате в '+provider:'Перейти к тестовой оплате';$('pay').hidden=false;$('pay').disabled=!ready;}}
+(() => {
+ const element = id => document.getElementById(id);
+ const endpoint = String(window.SHOP_CONFIG?.endpoint || '').replace(/\/$/, '');
+ const fallback = [
+  {id:'start',title:'Старт с Codex',description:'Первый небольшой проект и понятный план практики',price:59000},
+  {id:'site',title:'Сайт своими руками',description:'От идеи до страницы с работающими действиями',price:149000},
+  {id:'practice',title:'Больше практики',description:'Тот же учебный канал и материалы для проверки всей цепочки',price:249000}
+ ];
+ const storageKey = 'nobel-course-shop-v1';
+ const intentKey = storageKey + '.intent';
+ const currency = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0});
+ const money = price => currency.format(price / 100);
+ const paymentStates = {pending:'ожидается',paid:'подтверждена',canceled:'отменена'};
+ const accessStates = {
+  unlinked:'аккаунт Telegram ещё не связан',linked:'бот запущен',invited:'приглашение выдано',
+  requested:'ждём модератора',approving:'модератор открывает доступ',
+  approved:'канал доступен',declining:'заявка отклоняется',declined:'модератор отклонил заявку'
+ };
+
+ let packages = fallback;
+ let paymentMode = null;
+ let ready = false;
+ let selection = null;
+ let order = null;
+ let busy = false;
+ let lastFocus = null;
+
+ function read(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
  }
- $('pay').addEventListener('click',async()=>{if(busy||!selection||!ready)return;busy=true;$('pay').disabled=true;notice('Создаём тестовый платёж…');try{if(!creating)creating=intent(selection.id);const x=await api('create',creating);order={id:x.order.id,accessToken:x.accessToken,packageId:selection.id,confirmationUrl:external(x.confirmationUrl,'payment')};save();if(x.order.paymentState==='paid'){update(await api('status',{id:order.id},order.accessToken));return;}if(!order.confirmationUrl)throw new Error('Не удалось получить ссылку на тестовую оплату.');location.assign(order.confirmationUrl);}catch(e){notice(e.message,true);}finally{busy=false;$('pay').disabled=false;}});
- async function refresh(){if(busy||!order)return;busy=true;$('refresh').disabled=true;notice('Проверяем статус оплаты…');try{update(await api('status',{id:order.id},order.accessToken));}catch(e){notice(e.message,true);}finally{busy=false;$('refresh').disabled=false;}}
- $('refresh').addEventListener('click',refresh);
- $('close').addEventListener('click',()=>$('purchase').close());$('purchase').addEventListener('close',()=>lastFocus?.focus());
- function resume(){const saved=restore();if(!saved){alert('В этом браузере пока нет сохранённой покупки. Выберите пакет.');return;}const p=packages.find(p=>p.id===saved.packageId)||packages[0];open(p,$('restore'));order=saved;$('pay').hidden=true;$('refresh').hidden=false;const u=external(saved.confirmationUrl,'payment');if(u){$('resume').href=u;$('resume').hidden=false;}refresh();}
- $('restore').addEventListener('click',resume);
- async function init(){render();try{const data=await api('catalog');packages=data.packages;ready=data.paymentConfigured;provider=({robokassa_test:"Robokassa",yookassa_test:"ЮKassa"})[data.paymentMode]||null;render();$('connection').textContent=ready?'Тестовый магазин подключён. Оплата проверяется сервером.':'Витрина готова. Подключаем тестовый магазин и Telegram.';$('connection').classList.toggle('ready',ready);if(!data.telegramConfigured&&ready)$('connection').textContent+=' Telegram ещё настраивается.';}catch{$('connection').textContent='Сервер пока не подключён. Доступен просмотр пакетов.';}if(new URLSearchParams(location.search).has('order')){history.replaceState({},'',location.pathname);if(restore())resume();else{$('connection').textContent='Откройте покупку в том же браузере, где начали оплату. Здесь нет её ключа доступа.';}}}
+ function write(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+ }
+ function clearIntent(id) {
+  if (read(intentKey)?.requestId !== id) return;
+  try { localStorage.removeItem(intentKey); } catch {}
+ }
+ function restore() {
+  const saved = read(storageKey);
+  if (saved?.id && saved?.accessToken) return saved;
+  const pending = read(intentKey);
+  if (pending?.requestId && pending?.clientKey) {
+   return {id:pending.requestId,accessToken:pending.clientKey,packageId:pending.packageId,mode:pending.mode};
+  }
+  return null;
+ }
+ function intent(packageId) {
+  const old = read(intentKey);
+  if (old?.packageId === packageId && old.mode === paymentMode && old.requestId && old.clientKey) return old;
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const clientKey = btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
+  const pending = {requestId:crypto.randomUUID(),packageId,clientKey,mode:paymentMode};
+  write(intentKey,pending);
+  return pending;
+ }
+ function external(value, kind) {
+  try {
+   const url = new URL(value);
+   if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
+   if (kind === 'telegram') return url.hostname === 't.me' ? url.href : null;
+   if (url.hostname === 'auth.robokassa.ru' && url.pathname === '/Merchant/Index.aspx' && url.searchParams.get('IsTest') === '1') return url.href;
+   return ['yoomoney.ru','yookassa.ru'].some(host => url.hostname === host || url.hostname.endsWith('.'+host)) ? url.href : null;
+  } catch { return null; }
+ }
+ async function api(path, data, accessToken) {
+  if (!endpoint) throw new Error('Сервер пока не подключён.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+   const response = await fetch(endpoint + '/' + path, {
+    method:data ? 'POST' : 'GET',
+    headers:{'Content-Type':'application/json',...(accessToken ? {Authorization:'Bearer '+accessToken} : {})},
+    ...(data ? {body:JSON.stringify(data)} : {}),
+    signal:controller.signal
+   });
+   const reply = await response.json();
+   if (!response.ok) throw new Error(reply.error || 'Не удалось выполнить запрос.');
+   return reply;
+  } catch (error) {
+   if (error.name === 'AbortError') throw new Error('Сервис не ответил вовремя. Попробуйте проверить статус.');
+   if (error instanceof TypeError) throw new Error('Нет связи с сервером. Попробуйте ещё раз.');
+   throw error;
+  } finally { clearTimeout(timer); }
+ }
+ function notice(text, error = false) {
+  element('notice').textContent = text;
+  element('notice').classList.toggle('error',error);
+ }
+ function actions(...visible) {
+  for (const id of ['pay','demo-confirm','demo-cancel','refresh','telegram','resume']) {
+   element(id).hidden = !visible.includes(id);
+  }
+ }
+ function payLabel() {
+  if (paymentMode === 'demo') return 'Создать учебный заказ';
+  const provider = {robokassa_test:'Robokassa',yookassa_test:'ЮKassa'}[paymentMode];
+  return provider ? 'Перейти к оплате в '+provider : 'Перейти к тестовой оплате';
+ }
+ function render() {
+  const box = element('packages');
+  box.replaceChildren();
+  packages.forEach((item,index) => {
+   const card = document.createElement('article');
+   card.className = 'package';
+   const label = document.createElement('div');
+   label.className = 'package-label';
+   label.textContent = ['Первый шаг','Собственный проект','Практический пакет'][index] || 'Пакет';
+   const heading = document.createElement('h3');
+   heading.textContent = item.title;
+   const description = document.createElement('p');
+   description.className = 'description';
+   description.textContent = item.description;
+   const price = document.createElement('p');
+   price.className = 'price';
+   price.textContent = money(item.price);
+   const hint = document.createElement('div');
+   hint.className = 'price-note';
+   hint.textContent = 'тестовая стоимость · без списания';
+   const button = document.createElement('button');
+   button.type = 'button';
+   button.textContent = 'Выбрать пакет';
+   button.addEventListener('click',() => open(item,button));
+   card.append(label,heading,description,price,hint,button);
+   box.append(card);
+  });
+ }
+ function open(item, focus) {
+  lastFocus = focus || document.activeElement;
+  selection = item;
+  order = null;
+  element('dialog-title').textContent = item.title;
+  element('summary').textContent = money(item.price)+' · доступ в учебный канал и два файла';
+  element('progress').textContent = 'Учебная покупка для демонстрации.';
+  element('pay').textContent = payLabel();
+  element('pay').disabled = !ready;
+  actions('pay');
+  notice(!ready ? 'Доступен просмотр пакетов. Оплата пока подключается.'
+   : paymentMode === 'demo' ? 'Сайт сохранит заказ. Затем можно выбрать подтверждение или отмену. Карта не нужна.'
+   : 'Используйте тестовые платёжные данные на странице оплаты.');
+  element('purchase').showModal();
+ }
+ function update(reply) {
+  const result = reply.order;
+  const sameOrder = order?.id === result.id;
+  const isDemo = result.mode === 'demo';
+  const confirmationUrl = external(reply.confirmationUrl,'payment') || (sameOrder ? order.confirmationUrl : null);
+  order = {...order,id:result.id,packageId:result.packageId,mode:result.mode,confirmationUrl};
+  write(storageKey,order);
+  if (result.paymentState !== 'pending') clearIntent(result.id);
+  element('dialog-title').textContent = 'Покупка №'+result.number;
+  const packageTitle = packages.find(item => item.id === result.packageId)?.title || 'Учебный пакет';
+  element('summary').textContent = packageTitle + ' · ' + money(result.price);
+  element('progress').textContent = 'Оплата: '+paymentStates[result.paymentState]+' · Доступ: '+accessStates[result.accessState];
+
+  if (result.paymentState === 'paid') {
+   const link = external(reply.telegramUrl,'telegram');
+   if (link) {
+    element('telegram').href = link;
+    actions('telegram','refresh');
+    notice(result.accessState === 'approved' ? 'Доступ подтверждён. Учебные файлы находятся в боте.'
+     : 'Оплата подтверждена. Запустите бота и подайте заявку в канал. Файлы придут после одобрения.');
+   } else {
+    actions('refresh');
+    notice('Учебная оплата подтверждена, деньги не списаны. Следующий шаг — запуск Telegram-бота после подключения канала.');
+   }
+  } else if (result.paymentState === 'canceled') {
+   actions('refresh');
+   notice('Учебная оплата отменена. Доступ по этой покупке закрыт. Выберите пакет ещё раз для новой попытки.');
+  } else if (isDemo) {
+   actions('demo-confirm','demo-cancel','refresh');
+   notice('Заказ сохранён. Выберите результат учебной оплаты. Сумма указана для примера.');
+  } else if (confirmationUrl && result.mode === paymentMode) {
+   element('resume').href = confirmationUrl;
+   actions('resume','refresh');
+   notice('Платёж ожидает подтверждения. Завершите его на тестовой странице платёжного сервиса.');
+  } else {
+   actions('refresh');
+   notice('Платёж ещё не подтверждён. Выберите пакет заново, чтобы начать покупку в текущем режиме.');
+  }
+ }
+ async function run(task, message) {
+  if (busy) return;
+  busy = true;
+  const buttons = ['pay','demo-confirm','demo-cancel','refresh'].map(element);
+  buttons.forEach(button => { button.disabled = true; });
+  notice(message);
+  try { await task(); } catch (error) { notice(error.message,true); }
+  finally {
+   busy = false;
+   buttons.forEach(button => { button.disabled = button.id === 'pay' && !ready; });
+  }
+ }
+ element('pay').addEventListener('click',() => {
+  if (!selection || !ready) return;
+  run(async () => {
+   const pending = intent(selection.id);
+   const reply = await api('create',{requestId:pending.requestId,packageId:pending.packageId,clientKey:pending.clientKey});
+   order = {id:reply.order.id,accessToken:reply.accessToken,packageId:selection.id,mode:reply.order.mode,confirmationUrl:external(reply.confirmationUrl,'payment')};
+   write(storageKey,order);
+   if (reply.order.mode === 'demo') {
+    update(reply);
+    element('demo-confirm').focus();
+   } else if (reply.order.paymentState === 'paid') {
+    update(await api('status',{id:order.id},order.accessToken));
+   } else if (order.confirmationUrl) {
+    location.assign(order.confirmationUrl);
+   } else {
+    throw new Error('Не удалось получить ссылку на тестовую оплату.');
+   }
+  },'Сохраняем учебный заказ…');
+ });
+ function decide(outcome) {
+  if (!order || order.mode !== 'demo') return;
+  run(async () => update(await api('demo-payment',{id:order.id,outcome},order.accessToken)),'Сохраняем результат оплаты…');
+ }
+ function refresh() {
+  if (!order) return;
+  run(async () => update(await api('status',{id:order.id},order.accessToken)),'Проверяем статус оплаты…');
+ }
+ element('demo-confirm').addEventListener('click',() => decide('paid'));
+ element('demo-cancel').addEventListener('click',() => decide('canceled'));
+ element('refresh').addEventListener('click',refresh);
+ element('close').addEventListener('click',() => { if (!busy) element('purchase').close(); });
+ element('purchase').addEventListener('cancel',event => { if (busy) event.preventDefault(); });
+ element('purchase').addEventListener('close',() => lastFocus?.focus());
+
+ function resume() {
+  const saved = restore();
+  if (!saved) { alert('В этом браузере пока нет сохранённой покупки. Выберите пакет.'); return; }
+  const item = packages.find(item => item.id === saved.packageId) || packages[0];
+  if (!item) return;
+  open(item,element('restore'));
+  order = saved;
+  actions('refresh');
+  refresh();
+ }
+ element('restore').addEventListener('click',resume);
+ async function init() {
+  render();
+  try {
+   const catalog = await api('catalog');
+   packages = catalog.packages;
+   ready = catalog.paymentConfigured;
+   paymentMode = catalog.paymentMode;
+   render();
+   const banner = element('connection');
+   banner.textContent = !ready ? 'Доступен просмотр пакетов. Оплата пока подключается.'
+    : paymentMode === 'demo' ? 'Учебная оплата доступна. Заказы сохраняются, деньги не списываются.'
+    : 'Тестовый магазин подключён. Оплата проверяется сервером.';
+   banner.classList.toggle('ready',ready);
+   if (!catalog.telegramConfigured && ready) banner.textContent += ' Подключение Telegram ещё завершается.';
+  } catch { element('connection').textContent = 'Сервер пока не подключён. Доступен просмотр пакетов.'; }
+  if (new URLSearchParams(location.search).has('order')) {
+   history.replaceState({},'',location.pathname);
+   if (restore()) resume();
+   else element('connection').textContent = 'Откройте покупку в том же браузере, в котором начали оплату.';
+  }
+ }
  init();
 })();
