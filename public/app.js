@@ -6,6 +6,11 @@
   {id:'site',title:'Сайт своими руками',description:'От идеи до страницы с работающими действиями',price:149000},
   {id:'practice',title:'Больше практики',description:'Тот же учебный канал и материалы для проверки всей цепочки',price:249000}
  ];
+ const coursePhotos = new Map([
+  ['start','./course-studio.jpg'],
+  ['site','./course-website.jpg'],
+  ['practice','./course-workbook.jpg']
+ ]);
  const storageKey = 'nobel-course-shop-v1';
  const intentKey = storageKey + '.intent';
  const currency = new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0});
@@ -102,6 +107,14 @@
   packages.forEach(item => {
    const card = document.createElement('article');
    card.className = 'package';
+   const photo = document.createElement('img');
+   photo.className = 'package-photo';
+   photo.src = coursePhotos.get(item.id) || coursePhotos.get('start');
+   photo.alt = '';
+   photo.loading = 'lazy';
+   photo.decoding = 'async';
+   const body = document.createElement('div');
+   body.className = 'package-body';
    const heading = document.createElement('h3');
    heading.textContent = item.title;
    const description = document.createElement('p');
@@ -115,7 +128,11 @@
    button.textContent = 'Выбрать пакет';
    button.setAttribute('aria-label','Выбрать пакет «'+item.title+'»');
    button.addEventListener('click',() => open(item,button));
-   card.append(heading,description,price,button);
+   const bottom = document.createElement('div');
+   bottom.className = 'package-bottom';
+   bottom.append(price,button);
+   body.append(heading,description,bottom);
+   card.append(photo,body);
    box.append(card);
   });
  }
@@ -252,5 +269,48 @@
    }
   }
  }
+ function initPreview() {
+  const tabs = [...document.querySelectorAll('.preview-tabs [role="tab"]')];
+  function selectTab(selected) {
+   tabs.forEach(tab => {
+    const active = tab === selected;
+    tab.setAttribute('aria-selected',String(active));
+    tab.tabIndex = active ? 0 : -1;
+    element(tab.getAttribute('aria-controls')).hidden = !active;
+   });
+  }
+  tabs.forEach((tab,index) => {
+   tab.addEventListener('click',() => selectTab(tab));
+   tab.addEventListener('keydown',event => {
+    const next = {
+     ArrowRight:(index + 1) % tabs.length,
+     ArrowLeft:(index + tabs.length - 1) % tabs.length,
+     Home:0,
+     End:tabs.length - 1
+    }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    selectTab(tabs[next]);
+    tabs[next].focus();
+   });
+  });
+  element('copy-prompt').addEventListener('click',async () => {
+   try {
+    await navigator.clipboard.writeText(element('sample-prompt').textContent.trim());
+    element('copy-status').textContent = 'Промпт скопирован';
+   } catch {
+    element('copy-status').textContent = 'Скопируйте текст вручную';
+   }
+  });
+  const checkboxes = [...element('sample-sheet').querySelectorAll('input[type="checkbox"]')];
+  function updateSteps() {
+   const completed = checkboxes.filter(check => check.checked).length;
+   element('step-count').textContent = completed + ' из ' + checkboxes.length;
+   element('step-progress').value = completed;
+  }
+  checkboxes.forEach(check => check.addEventListener('change',updateSteps));
+  updateSteps();
+ }
+ initPreview();
  init();
 })();

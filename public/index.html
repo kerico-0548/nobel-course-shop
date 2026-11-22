@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Практические курсы по Codex. Освойте инструмент на своём проекте и получите учебные материалы в Telegram.">
+  <meta name="description" content="Практические курсы по Codex. Соберите свой проект, проверьте результат и получите рабочие материалы в Telegram.">
+  <meta name="theme-color" content="#f6f4eb">
   <title>Практика · Курсы по Codex</title>
-  <link rel="stylesheet" href="./styles.css?v=2">
+  <link rel="stylesheet" href="./styles.css?v=3">
   <script defer src="./config.js"></script>
-  <script defer src="./app.js?v=2"></script>
+  <script defer src="./app.js?v=3"></script>
 </head>
 <body>
   <header class="site-header wrap">
@@ -16,33 +17,72 @@
     </a>
     <nav aria-label="Основное меню">
       <a class="nav-link" href="#courses">Курсы</a>
+      <a class="nav-link" href="#preview">Пример урока</a>
       <button id="restore" class="order-link" type="button">Мой заказ</button>
     </nav>
   </header>
 
   <main class="wrap">
     <section class="hero" aria-labelledby="hero-title">
+      <img class="hero-image" src="./course-hero.jpg" alt="" width="1672" height="941" fetchpriority="high">
       <div class="hero-copy">
-        <h1 id="hero-title">Курсы<br>по Codex<span>.</span></h1>
-        <p class="lead">Освойте Codex на своих проектах: от первой задачи до работающего сайта.</p>
-        <a class="primary hero-action" href="#courses">Выбрать курс <span aria-hidden="true">↘</span></a>
+        <p class="hero-topic">Практические курсы по Codex</p>
+        <h1 id="hero-title">От идеи<br>до сайта<span>.</span></h1>
+        <p class="lead">Научитесь ставить задачи Codex, собирать сайт и проверять, что всё работает.</p>
+        <div class="hero-actions">
+          <a class="primary hero-action" href="#courses">Выбрать курс <span aria-hidden="true">↘</span></a>
+          <a class="hero-preview" href="#preview">Посмотреть пример <span aria-hidden="true">↗</span></a>
+        </div>
         <p class="test-note">Тестовая оплата без списаний</p>
       </div>
-      <img class="hero-image" src="./course-studio.jpg" alt="" width="1448" height="1086" fetchpriority="high">
     </section>
 
     <section id="courses" class="courses" aria-labelledby="courses-title">
       <div class="section-head">
-        <h2 id="courses-title">Выберите курс</h2>
-        <p>В каждом пакете — доступ в закрытый Telegram-канал, урок и таблица для практики.</p>
+        <h2 id="courses-title">Курсы</h2>
+        <p>В каждом пакете есть урок, таблица для практики и доступ в закрытый Telegram-канал.</p>
       </div>
       <p id="connection" class="connection" role="status">Загружаем курсы…</p>
       <div id="packages" class="packages" aria-label="Пакеты курсов"></div>
     </section>
+
+    <section id="preview" class="preview" aria-labelledby="preview-title">
+      <div class="preview-intro">
+        <h2 id="preview-title">Попробуйте<br>фрагмент урока</h2>
+        <p>Скопируйте задание для Codex или отметьте шаги в примере рабочей таблицы.</p>
+      </div>
+      <div class="preview-card">
+        <div class="preview-tabs" role="tablist" aria-label="Примеры материалов">
+          <button id="tab-lesson" type="button" role="tab" aria-selected="true" aria-controls="sample-lesson">Урок</button>
+          <button id="tab-sheet" type="button" role="tab" aria-selected="false" aria-controls="sample-sheet" tabindex="-1">Таблица</button>
+        </div>
+        <div id="sample-lesson" class="preview-panel" role="tabpanel" aria-labelledby="tab-lesson" tabindex="0">
+          <h3>Список задач</h3>
+          <p id="sample-prompt">Создай простую русскоязычную страницу со списком задач. Добавь создание задач, отметку выполнения и удаление с подтверждением. Сохраняй задачи в браузере. Используй HTML, CSS и JavaScript. Запусти страницу локально и проверь основные действия.</p>
+          <div class="copy-row">
+            <button id="copy-prompt" class="secondary" type="button">Скопировать промпт</button>
+            <span id="copy-status" role="status"></span>
+          </div>
+        </div>
+        <div id="sample-sheet" class="preview-panel" role="tabpanel" aria-labelledby="tab-sheet" tabindex="0" hidden>
+          <div class="sheet-heading">
+            <h3>Шаги практики</h3>
+            <span id="step-count" role="status">0 из 3</span>
+          </div>
+          <progress id="step-progress" max="3" value="0" aria-label="Выполнение шагов"></progress>
+          <ul class="checklist">
+            <li><label><input type="checkbox"> Подготовить папку</label></li>
+            <li><label><input type="checkbox"> Создать страницу</label></li>
+            <li><label><input type="checkbox"> Проверить сохранение</label></li>
+          </ul>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer wrap">
-    <p>После оплаты откройте Telegram и подайте заявку на вступление. Бот пришлёт материалы после одобрения.</p>
+    <p>После оплаты подайте заявку через Telegram. Бот пришлёт материалы, когда модератор одобрит вступление.</p>
+    <a href="#courses">К курсам <span aria-hidden="true">↑</span></a>
   </footer>
 
   <dialog id="purchase" aria-labelledby="dialog-title">
